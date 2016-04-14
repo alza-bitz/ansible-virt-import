@@ -1,0 +1,3 @@
+---
+
+ova_dir: ~/VirtualMachines/{{ ova_path | basename | replace('.ova', '') }}

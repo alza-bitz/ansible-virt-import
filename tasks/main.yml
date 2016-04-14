@@ -1,0 +1,101 @@
+---
+
+# TODO assert ova_path with error message
+
+# TODO use xmllint, xsltproc instead of xmlstarlet
+- yum: name={{ item }} state=present
+  with_items:
+    - tar
+    - qemu-img
+    - xmlstarlet
+  sudo: yes
+  delegate_to: localhost
+
+#- get_url: >
+#    dest=~/Downloads
+#    url={{ ova_url }}
+
+# register vmdk file name
+- shell: tar tvf {{ ova_path }} | cut -d ' ' -f 6- | grep vmdk
+  register: ls_vmdk
+  changed_when: false
+  delegate_to: localhost
+
+# register ovf file name
+- shell: tar tvf {{ ova_path }} | cut -d ' ' -f 6- | grep ovf
+  register: ls_ovf
+  changed_when: false
+  delegate_to: localhost
+
+- file: path={{ ova_dir }} state=directory
+  delegate_to: localhost
+
+- unarchive:
+    src: "{{ ova_path }}"
+    dest: "{{ ova_dir }}"
+    creates: "{{ ova_dir }}/{{ ls_vmdk.stdout }}"
+  delegate_to: localhost
+
+# convert
+- command: qemu-img convert -O qcow2 "{{ ls_vmdk.stdout }}" "{{ ls_vmdk.stdout | replace('.vmdk', '.qcow2') }}"
+  args:
+    chdir: "{{ ova_dir }}"
+    creates: "{{ ova_dir }}/{{ ls_vmdk.stdout | replace('.vmdk', '.qcow2') }}"
+  delegate_to: localhost
+
+# register machine name (from ovf file)
+- command: xmlstarlet sel -N vbox=http://www.virtualbox.org/ovf/machine -t -v "//vbox:Machine/@name" "{{ ls_ovf.stdout }}"
+  args:
+    chdir: "{{ ova_dir }}"
+  register: xmlstarlet_name
+  changed_when: false
+  delegate_to: localhost
+
+# TODO use xmllint, xsltproc instead of xmlstarlet
+- yum: name={{ item }} state=present
+  with_items:
+    - xmlstarlet
+    - "@virtualization"
+  sudo: yes
+
+- command: mktemp -d
+  register: mktemp
+  changed_when: false
+
+- file: path={{ ova_dir }} state=directory
+
+# copy qcow2 file, ovf file
+# TODO use rsync w/partial file support
+- copy: src={{ item }} dest={{ ova_dir }} 
+  with_fileglob: "{{ ova_dir }}/*"
+
+# copy xslt files
+- copy: src={{ item }} dest={{ mktemp.stdout }}
+  with_fileglob:
+    - "*.xslt"
+  changed_when: false
+
+# create definition of domain
+- shell: virt-install --import --disk "{{ ova_dir | expanduser }}/{{ ls_vmdk.stdout | replace('.vmdk', '.qcow2') }}" 
+    --name {{ mktemp.stdout | basename }} --memory 1024 --check path_in_use=off --print-xml > domain.xml 
+  args:
+    chdir: "{{ mktemp.stdout }}"
+  changed_when: false
+
+# transform domain definition to correspond with ovf
+# TODO handle memory, os-type, os-variant..
+- command: xmlstarlet tr ovf-mapping.xslt -s file="{{ ova_dir | expanduser }}/{{ ls_ovf.stdout | replace(' ', '%20')}}" domain.xml
+  args:
+    chdir: "{{ mktemp.stdout }}"
+  register: xmlstarlet_domain
+  changed_when: false
+
+# define domain from definition
+- virt:
+    command: define
+    name: "{{ xmlstarlet_name.stdout }}"
+    xml: "{{ xmlstarlet_domain.stdout }}"
+    uri: qemu:///session
+
+- file: name={{ mktemp.stdout }} state=absent
+  changed_when: false
