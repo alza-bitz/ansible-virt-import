@@ -1,6 +1,6 @@
 ---
 
-# TODO assert ova_path with error message
+# TODO assert ova_url or ova_path with error message
 
 # TODO use xmllint, xsltproc instead of xmlstarlet
 - yum: name={{ item }} state=present
@@ -11,9 +11,15 @@
   sudo: yes
   delegate_to: localhost
 
-#- get_url: >
-#    dest=~/Downloads
-#    url={{ ova_url }}
+- get_url: >
+    dest=~/Downloads
+    url={{ ova_url }}
+  when: ova_url is defined
+  delegate_to: localhost
+
+- set_fact:
+    ova_path: ~/Downloads/{{ ova_url | basename }}
+  when: ova_url is defined 
 
 # register vmdk file name
 - shell: tar tvf {{ ova_path }} | cut -d ' ' -f 6- | grep vmdk
