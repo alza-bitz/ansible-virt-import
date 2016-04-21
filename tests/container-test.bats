@@ -18,7 +18,10 @@ setup() {
   local _ssh_public_key=~/.ssh/id_rsa.pub
   docker run --name $docker_container_name -d -p 5555:22 \
     -e USERNAME=test -e AUTHORIZED_KEYS="$(< $_ssh_public_key)" -v $docker_container_name:/var/cache/dnf $docker_image
-  docker_exec_root sed -i -e 's/keepcache=\(.*\)/keepcache=1/' /etc/dnf/dnf.conf
+#  docker_exec_root sed -i -e 's/keepcache=\(.*\)/keepcache=1/' /etc/dnf/dnf.conf
+# metadata_timer_sync=0
+# http://superuser.com/questions/590630/sed-how-to-replace-line-if-found-or-append-to-end-of-file-if-not-found
+# also see 'library/firefox_addon' in ansible-firefox-addon
 }
 
 @test "Role can be applied to container" {
