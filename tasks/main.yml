@@ -3,13 +3,13 @@
 # TODO assert ova_url or ova_path with error message
 
 # TODO use xmllint, xsltproc instead of xmlstarlet
-- yum: name={{ item }} state=present
-  with_items:
-    - tar
-    - qemu-img
-    - xmlstarlet
-  sudo: yes
-  delegate_to: localhost
+#- yum: name={{ item }} state=present
+#  with_items:
+#    - tar
+#    - qemu-img
+#    - xmlstarlet
+#  sudo: yes
+#  delegate_to: localhost
 
 - get_url: >
     dest=~/Downloads
@@ -60,6 +60,7 @@
 # TODO use xmllint, xsltproc instead of xmlstarlet
 - yum: name={{ item }} state=present
   with_items:
+    - rsync
     - xmlstarlet
     - "@virtualization"
   sudo: yes
@@ -71,9 +72,8 @@
 - file: path={{ ova_dir }} state=directory
 
 # copy qcow2 file, ovf file
-# TODO use rsync w/partial file support
-- copy: src={{ item }} dest={{ ova_dir }} 
-  with_fileglob: "{{ ova_dir }}/*"
+- synchronize: src={{ ova_dir }}/ dest={{ ova_dir }} compress=no
+#  with_fileglob: "{{ ova_dir }}/*"
 
 # copy xslt files
 - copy: src={{ item }} dest={{ mktemp.stdout }}
@@ -82,15 +82,21 @@
   changed_when: false
 
 # create definition of domain
-- shell: virt-install --import --disk "{{ ova_dir | expanduser }}/{{ ls_vmdk.stdout | replace('.vmdk', '.qcow2') }}" 
-    --name {{ mktemp.stdout | basename }} --memory 1024 --check path_in_use=off --print-xml > domain.xml 
+- shell: virt-install --import --disk {{ ova_dir }}/{{ ls_vmdk.stdout | replace('.vmdk', '.qcow2') }} 
+    --name {{ mktemp.stdout | basename }} --memory 1024 --check path_in_use=off --print-xml > domain.xml
   args:
     chdir: "{{ mktemp.stdout }}"
   changed_when: false
 
+- shell: printf {{ ova_dir }}
+  register: ova_dir_exp
+  changed_when: false
+
+- debug: var=ova_dir_exp
+
 # transform domain definition to correspond with ovf
-# TODO handle memory, os-type, os-variant..
-- command: xmlstarlet tr ovf-mapping.xslt -s file="{{ ova_dir | expanduser }}/{{ ls_ovf.stdout | replace(' ', '%20')}}" domain.xml
+# TODO handle os-type, os-variant..
+- shell: xmlstarlet tr ovf-mapping.xslt -s file={{ ova_dir_exp.stdout }}/{{ ls_ovf.stdout | replace(' ', '%20') }} domain.xml
   args:
     chdir: "{{ mktemp.stdout }}"
   register: xmlstarlet_domain

@@ -1,0 +1,8 @@
+- hosts: container
+  remote_user: test
+
+  vars_files:
+    - ../defaults/main.yml
+
+  tasks:
+    - include: ../tasks/main.yml
