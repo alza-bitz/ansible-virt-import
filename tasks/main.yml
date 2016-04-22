@@ -73,7 +73,6 @@
 
 # copy qcow2 file, ovf file
 - synchronize: src={{ ova_dir }}/ dest={{ ova_dir }} compress=no
-#  with_fileglob: "{{ ova_dir }}/*"
 
 # copy xslt files
 - copy: src={{ item }} dest={{ mktemp.stdout }}
@@ -92,11 +91,9 @@
   register: ova_dir_exp
   changed_when: false
 
-- debug: var=ova_dir_exp
-
 # transform domain definition to correspond with ovf
 # TODO handle os-type, os-variant..
-- shell: xmlstarlet tr ovf-mapping.xslt -s file={{ ova_dir_exp.stdout }}/{{ ls_ovf.stdout | replace(' ', '%20') }} domain.xml
+- command: xmlstarlet tr ovf-mapping.xslt -s file={{ ova_dir_exp.stdout }}/{{ ls_ovf.stdout | replace(' ', '%20') }} domain.xml
   args:
     chdir: "{{ mktemp.stdout }}"
   register: xmlstarlet_domain
