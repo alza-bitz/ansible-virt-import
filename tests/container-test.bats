@@ -1,32 +1,50 @@
 #!/usr/bin/env bats
 
-# requirements for this test: docker, ansible, sed, grep
-# requirements for playbook under test: tar, qemu-img, xmlstarlet
+# dependencies of this test: bats, ansible, docker, sed, grep
+# control machine requirements for playbook under test: tar, qemu-img, xmlstarlet
 
-readonly docker_image="alzadude/fedora-ansible-test:23"
-readonly docker_container_name="ansible-virt-import"
+readonly container_name=ansible-virt-import
 readonly ova_path=~/Downloads/centos-7-amd64.ova
 
-docker_exec() {
-  docker exec -u test $docker_container_name $@
+container_startup() {
+  local _container_name=$1
+  local _container_image=$2
+  local _ssh_port=5555
+  local _ssh_public_key=~/.ssh/id_rsa.pub
+  docker run --name $_container_name -d -p $_ssh_port:22 \
+    -e USERNAME=test -e AUTHORIZED_KEYS="$(< $_ssh_public_key)" -v $_container_name:/var/cache/dnf $_container_image
 }
 
-docker_exec_root() {
-  docker exec $docker_container_name $@
+container_cleanup() {
+  local _container_name=$1
+  docker stop $_container_name > /dev/null
+  docker rm $_container_name > /dev/null
+}
+
+container_exec() {
+  ansible container -i hosts -u test -m shell -a "$*" | tail -n +2
+}
+
+container_exec_sudo() {
+  ansible container -i hosts -u test -s -m shell -a "$*" | tail -n +2
+}
+
+container_dnf_conf() {
+  local _name=$1
+  local _value=$2
+  ansible container -i hosts -u test -s -m lineinfile -a \
+    "dest=/etc/dnf/dnf.conf regexp='^$_name=\S+$' line='$_name=$_value'"
 }
 
 setup() {
-  local _ssh_public_key=~/.ssh/id_rsa.pub
-  docker run --name $docker_container_name -d -p 5555:22 \
-    -e USERNAME=test -e AUTHORIZED_KEYS="$(< $_ssh_public_key)" -v $docker_container_name:/var/cache/dnf $docker_image
-# http://superuser.com/questions/590630/sed-how-to-replace-line-if-found-or-append-to-end-of-file-if-not-found
-  docker_exec_root sed -i '/^keepcache=/{h;s/=.*/=1/};${x;/^$/{s//keepcache=1/;H};x}' /etc/dnf/dnf.conf
-  docker_exec_root sed -i '/^metadata_timer_sync=/{h;s/=.*/=0/};${x;/^$/{s//metadata_timer_sync=0/;H};x}' /etc/dnf/dnf.conf
+  container_startup $container_name 'alzadude/fedora-ansible-test:23'
+  container_dnf_conf keepcache 1
+  container_dnf_conf metadata_timer_sync 0
 }
 
 @test "Role can be applied to container" {
   ansible-playbook -i hosts test.yml --extra-vars "ova_path=$ova_path"
-  docker_exec virsh -q list --all | grep "centos-7"
+  container_exec virsh -q list --all | grep "centos-7"
 }
 
 @test "Role is idempotent" {
@@ -36,6 +54,5 @@ setup() {
 }
 
 teardown() {
-  docker stop $docker_container_name > /dev/null
-  docker rm $docker_container_name > /dev/null
+  container_cleanup $container_name
 }
