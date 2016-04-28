@@ -9,10 +9,12 @@ readonly ova_path=~/Downloads/centos-7-amd64.ova
 container_startup() {
   local _container_name=$1
   local _container_image=$2
+  local _ssh_host=localhost
   local _ssh_port=5555
   local _ssh_public_key=~/.ssh/id_rsa.pub
   docker run --name $_container_name -d -p $_ssh_port:22 \
     -e USERNAME=test -e AUTHORIZED_KEYS="$(< $_ssh_public_key)" -v $_container_name:/var/cache/dnf $_container_image
+  ansible localhost -m wait_for -a "port=$_ssh_port host=$_ssh_host search_regex=OpenSSH delay=10"
 }
 
 container_cleanup() {
