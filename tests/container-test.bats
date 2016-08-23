@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 
-# dependencies of this test: bats, ansible, docker, sed, grep
-# control machine requirements for playbook under test: tar, qemu-img, xmlstarlet
+# dependencies of this test: bats, ansible, docker, grep
+# control machine requirements for playbook under test: tar, qemu-img
 
 readonly container_name=ansible-virt-import
 readonly ova_path=~/Downloads/centos-7-amd64.ova
@@ -17,44 +17,26 @@ container_startup() {
   ansible localhost -m wait_for -a "port=$_ssh_port host=$_ssh_host search_regex=OpenSSH delay=10"
 }
 
-container_cleanup() {
-  local _container_name=$1
-  docker stop $_container_name > /dev/null
-  docker rm $_container_name > /dev/null
-}
-
-container_exec() {
-  ansible container -i hosts -u test -m shell -a "$*" | tail -n +2
-}
-
-container_exec_sudo() {
-  ansible container -i hosts -u test -s -m shell -a "$*" | tail -n +2
-}
-
-container_dnf_conf() {
-  local _name=$1
-  local _value=$2
-  ansible container -i hosts -u test -s -m lineinfile -a \
-    "dest=/etc/dnf/dnf.conf regexp='^$_name=\S+$' line='$_name=$_value'"
-}
+readonly ova_path=~/Downloads/centos-7-amd64.ova
 
 setup() {
-  container_startup $container_name 'alzadude/fedora-ansible-test:23'
-  container_dnf_conf keepcache 1
-  container_dnf_conf metadata_timer_sync 0
+  container=$(container_startup fedora)
+  hosts=$(tmp_file $(container_inventory $container))
+  container_dnf_conf $container keepcache 1
+  container_dnf_conf $container metadata_timer_sync 0
 }
 
 @test "Role can be applied to container" {
-  ansible-playbook -i hosts test.yml --extra-vars "ova_path=$ova_path"
-  container_exec virsh -q list --all | grep "centos-7"
+  ansible-playbook -i $hosts ${BATS_TEST_DIRNAME}/test.yml --extra-vars "ova_path=$ova_path"
+  container_exec $container virsh -q list --all | grep "centos-7"
 }
 
 @test "Role is idempotent" {
-  run ansible-playbook -i hosts test.yml --extra-vars "ova_path=$ova_path"
-  run ansible-playbook -i hosts test.yml --extra-vars "ova_path=$ova_path"
+  run ansible-playbook -i $hosts ${BATS_TEST_DIRNAME}/test.yml --extra-vars "ova_path=$ova_path"
+  run ansible-playbook -i $hosts ${BATS_TEST_DIRNAME}/test.yml --extra-vars "ova_path=$ova_path"
   [[ $output =~ changed=0.*unreachable=0.*failed=0 ]]
 }
 
 teardown() {
-  container_cleanup $container_name
+  container_cleanup
 }

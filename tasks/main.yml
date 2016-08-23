@@ -7,7 +7,6 @@
 #  with_items:
 #    - tar
 #    - qemu-img
-#    - xmlstarlet
 #  sudo: yes
 #  delegate_to: localhost
 
@@ -47,14 +46,6 @@
   args:
     chdir: "{{ ova_dir }}"
     creates: "{{ ova_dir }}/{{ ls_vmdk.stdout | replace('.vmdk', '.qcow2') }}"
-  delegate_to: localhost
-
-# register machine name (from ovf file)
-- command: xmlstarlet sel -N vbox=http://www.virtualbox.org/ovf/machine -t -v "//vbox:Machine/@name" "{{ ls_ovf.stdout }}"
-  args:
-    chdir: "{{ ova_dir }}"
-  register: xmlstarlet_name
-  changed_when: false
   delegate_to: localhost
 
 # TODO use xmllint, xsltproc instead of xmlstarlet
@@ -97,6 +88,13 @@
   args:
     chdir: "{{ mktemp.stdout }}"
   register: xmlstarlet_domain
+  changed_when: false
+
+# register machine name (from ovf file)
+- command: xmlstarlet sel -N vbox=http://www.virtualbox.org/ovf/machine -t -v "//vbox:Machine/@name" "{{ ls_ovf.stdout }}"
+  args:
+    chdir: "{{ ova_dir }}"
+  register: xmlstarlet_name
   changed_when: false
 
 # define domain from definition
